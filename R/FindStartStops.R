@@ -24,6 +24,7 @@ find_start_and_stop_codons <- function(fasta_path, start = c('TTG', 'CTG', 'ATG'
   }
 
   seqname=names(sequence_to_search)[1]
+  seqlength = length(sequence_to_search[[1]])
 
   #Start Codons
   start_codons_df <- purrr::map_dfr(c(-3, -2, -1, 1, 2,3), .f = function(frame){
@@ -44,8 +45,7 @@ find_start_and_stop_codons <- function(fasta_path, start = c('TTG', 'CTG', 'ATG'
         grep(paste0(start, collapse="|"), x = ., ignore.case = TRUE),
       frame=frame,
       codon=seq[codon_number],
-      start=codon_number*3-3,
-      end=codon_number*3,
+      start=codon_number*3-3+seqinr_frame,
       class="start"
     )
   })
@@ -68,17 +68,25 @@ find_start_and_stop_codons <- function(fasta_path, start = c('TTG', 'CTG', 'ATG'
         grep(paste0(stop, collapse="|"), x = ., ignore.case = TRUE),
       frame=frame,
       codon=seq[codon_number],
-      start=codon_number*3-3,
-      end=codon_number*3,
+      start=codon_number*3-3+seqinr_frame,
       class="stop"
     )
   })
 
   start_and_stop_codons_df <- rbind(start_codons_df, stop_codons_df)
 
+  #put coords in terms of positive strand, even for -ve
+  message("seqlength: ", seqlength)
+  start_and_stop_codons_df <- start_and_stop_codons_df %>%
+    dplyr::mutate(
+      start = ifelse(frame > 0 , yes = start, no=seqlength-start-3),
+      end = start+3
+      )
+
   start_and_stop_codons_df <- start_and_stop_codons_df %>%
     dplyr::mutate(
       seqname = seqname,
+      name = paste0(class, "_", codon),
       itemRGB = ifelse(class=="start", yes = "0,230,0", no = "255,0,0"),
       thick_start = start,
       thick_end = end,
@@ -92,7 +100,7 @@ find_start_and_stop_codons <- function(fasta_path, start = c('TTG', 'CTG', 'ATG'
     start_and_stop_codons_df %>%
       dplyr::group_by(frame) %>%
       dplyr::group_walk( ~ .x %>%
-          dplyr::select(seqname, start, end, class, score, strand, thick_start, thick_end, itemRGB) %>%
+          dplyr::select(seqname, start, end, name, score, strand, thick_start, thick_end, itemRGB) %>%
           write.table(file = paste0(seqname, "_start_stop_", .y$frame, ".bed"), col.names = FALSE, row.names = FALSE, sep = "\t", quote=FALSE)
       )
   }
